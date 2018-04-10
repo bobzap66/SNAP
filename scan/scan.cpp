@@ -10,6 +10,8 @@ Description: Implentation of Scan.h.
 #include <unistd.h>
 #include <sys/wait.h>
 #include <cstdlib>
+#include <math.h>
+#include <fstream>
 
 /*The constructor reads the configuration file and fills in the class values. If you want to add a 
   configuration option, make sure it's in the correct format in the .config file and then add another else
@@ -22,7 +24,7 @@ Scan::Scan(){
     char val [1000];
 
     /*Use this when the val is a number. Convert to string first and then convert to something else
-    Just for ease*/
+      Just for ease*/
     std::string val_string;
 
     if (config != NULL){
@@ -35,16 +37,16 @@ Scan::Scan(){
 
                 devicepath.assign(val, strlen(val));
                 continue;                
-            
-            /*Number of scans for each call to scan. Default is 10*/        
+
+                /*Number of scans for each call to scan. Default is 10*/        
             }else if (strcmp(var, "numscansper") == 0){
-                
+
                 val_string.assign(val, strlen(val)); 
                 num_scans_per = stoi(val_string, NULL);
                 continue;
 
             }else if (strcmp(var, "motorspeed") == 0){
-                
+
                 val_string.assign(val, strlen(val));
                 motor_speed = stoi(val_string, NULL);
                 continue;
@@ -87,17 +89,26 @@ std::string Scan::get_device_path(){
 
 }
 
-int Scan:: perform_scan(){
-    
-        
+double Scan::DegreestoRadians(double degrees){
+
+    return ((degrees/180.0) * M_PI);
+
+}
+int Scan::perform_scan(std::ofstream& of){
+
+    int quadrant;
+    double temp_angle;
+    double angle;
+    double y;
+    double x;
+
     try{
-        
+
         /*Initalize sweep device and start the scanning process. Scanning is assured not to start until
           the device is calibrated*/
-//        sweep::sweep device{devicepath.c_str()};
-        
+
         sweep::sweep device{devicepath.c_str()};
-      
+
         if (device.get_motor_speed() != motor_speed) device.set_motor_speed(motor_speed);
         if (device.get_sample_rate() != sample_rate) device.set_sample_rate(sample_rate);
 
@@ -107,12 +118,83 @@ int Scan:: perform_scan(){
         for (int i = 0; i < num_scans_per; i++){
 
             const sweep::scan scan = device.get_scan();
-            std::cout << "Scan #" << i << ":" << std::endl;
 
             for (const sweep::sample& sample : scan.samples){
 
-                std::cout << "angle " << sample.angle << " distance " << sample.distance << "strength " << sample.signal_strength << std::endl;
+//                std::cout << "angle " << (double)sample.angle/1000 << " distance " << sample.distance << " strength " << sample.signal_strength << std::endl;
+                
+                angle = (double)sample.angle/1000;
 
+                quadrant = (angle/90) + 1;
+
+                temp_angle = angle - (90 * (quadrant-1));
+                switch(quadrant){
+
+                    case 1:
+                        if (temp_angle < 45){
+
+                            y = (double) (abs(sample.distance * sin(DegreestoRadians(temp_angle))));
+                            x = (double) (abs(sample.distance * cos(DegreestoRadians(temp_angle))));            
+
+                        }else{
+
+                            y = (double) (abs(sample.distance * cos(DegreestoRadians(90 - temp_angle))));
+                            x = (double) (abs(sample.distance * sin(DegreestoRadians(90 - temp_angle))));
+
+                        }
+                        break;
+
+                    case 2:
+                        if (temp_angle < 45){
+
+                            y = (double) (abs(sample.distance * cos(DegreestoRadians(temp_angle))));
+                            x = (double) -(abs(sample.distance * sin(DegreestoRadians(temp_angle))));            
+
+                        }else{
+
+                            y = (double) (abs(sample.distance * sin(DegreestoRadians(90 - temp_angle))));
+                            x = (double) -(abs(sample.distance * cos(DegreestoRadians(90 - temp_angle))));
+
+                        }
+                        break;
+
+
+                    case 3:
+
+                        if (temp_angle < 45){
+
+                            y = (double) -(abs(sample.distance * sin(DegreestoRadians(temp_angle))));
+                            x = (double) -(abs(sample.distance * cos(DegreestoRadians(temp_angle))));            
+
+                        }else{
+
+                            y = (double) -(abs(sample.distance * cos(DegreestoRadians(90 - temp_angle))));
+                            x = (double) -(abs(sample.distance * sin(DegreestoRadians(90 - temp_angle))));
+
+                        }
+                        break;
+
+
+                    case 4:
+                        if (temp_angle < 45){
+
+                            y = (double) -(abs(sample.distance * cos(DegreestoRadians(temp_angle))));
+                            x = (double) (abs(sample.distance * sin(DegreestoRadians(temp_angle))));            
+
+                        }else{
+
+                            y = (double) -(abs(sample.distance * sin(DegreestoRadians(90 - temp_angle))));
+                            x = (double) (abs(sample.distance * cos(DegreestoRadians(90 - temp_angle))));
+
+                        }
+                        break;
+
+
+                }   
+                
+                if ((x/100.0 < 6.0 && x/100.0 > -6.0) && (y/100.00 < 6.0 && y/100.0 > -6.0)){                of << x/100.0;
+                of << " " << y/100.0 << " 0" << std::endl; 
+                }
             }
 
         }
@@ -130,7 +212,7 @@ int Scan:: perform_scan(){
 
 }
 
-
+/*
 int main (int argc, char** argv){
 
     int scan_stat;
@@ -138,3 +220,4 @@ int main (int argc, char** argv){
     scan_stat = S->perform_scan();
 
 }
+*/
